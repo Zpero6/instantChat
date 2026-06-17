@@ -21,7 +21,7 @@ public class LoginFrame extends JFrame {
         setTitle("校园即时通信系统 - 登录");
         setSize(360, 220);
         setLocationRelativeTo(null);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
         initView();
         connectServer();
@@ -102,6 +102,7 @@ public class LoginFrame extends JFrame {
             String username = usernameField.getText().trim();
             MainFrame mainFrame = new MainFrame(username, socketClient);
             socketClient.setMessageConsumer(mainFrame::handleMessage);
+            mainFrame.handleMessage(message);
             mainFrame.setVisible(true);
             dispose();
         }

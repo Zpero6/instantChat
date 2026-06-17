@@ -22,7 +22,19 @@ public class SocketClient {
         reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
         writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8"), true);
 
-        new Thread(new ServerListener(reader, this.messageConsumer)).start();
+        new Thread(() -> {
+            try {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    Message message = JsonUtils.fromJson(line, Message.class);
+                    if (this.messageConsumer != null) {
+                        this.messageConsumer.accept(message);
+                    }
+                }
+            } catch (Exception e) {
+                System.out.println("与服务器连接断开");
+            }
+        }).start();
     }
 
     public void send(Message message) {

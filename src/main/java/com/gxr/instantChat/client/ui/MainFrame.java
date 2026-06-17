@@ -30,7 +30,7 @@ public class MainFrame extends JFrame {
         setTitle("校园即时通信系统 - " + username);
         setSize(800, 560);
         setLocationRelativeTo(null);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
         initView();
         initEvents();
@@ -80,6 +80,7 @@ public class MainFrame extends JFrame {
     public void handleMessage(Message message) {
         SwingUtilities.invokeLater(() -> {
             switch (message.getType()) {
+                case MessageType.LOGIN_RESULT:
                 case MessageType.ONLINE_USERS:
                     refreshOnlineUsers(message);
                     break;

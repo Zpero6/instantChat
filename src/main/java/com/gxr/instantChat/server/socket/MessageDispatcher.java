@@ -59,12 +59,14 @@ public class MessageDispatcher {
         result.setSuccess(success);
         result.setReason(success ? "登录成功" : "用户名或密码错误");
 
-        clientHandler.send(result);
-
         if (success) {
             clientHandler.setUsername(message.getFrom());
             OnlineUserManager.addUser(message.getFrom(), clientHandler);
+            result.setOnlineUsers(OnlineUserManager.getOnlineUsers());
+            clientHandler.send(result);
             broadcastOnlineUsers();
+        } else {
+            clientHandler.send(result);
         }
     }
 
