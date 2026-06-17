@@ -39,7 +39,7 @@ public class ChatMessageService {
                                 .or()
                                 .eq("sender", user2).eq("receiver", user1)
                         )
-                        .eq("msg_type", MessageType.PRIVATE_CHAT)
+                        .in("msg_type", MessageType.PRIVATE_CHAT, MessageType.FILE)
                         .orderByAsc("send_time")
         );
     }
@@ -47,7 +47,13 @@ public class ChatMessageService {
     public List<ChatMessage> queryGroupHistory() {
         return chatMessageMapper.selectList(
                 new QueryWrapper<ChatMessage>()
-                        .eq("msg_type", MessageType.GROUP_CHAT)
+                        .and(wrapper -> wrapper
+                                .eq("msg_type", MessageType.GROUP_CHAT)
+                                .or(groupFile -> groupFile
+                                        .eq("msg_type", MessageType.FILE)
+                                        .eq("receiver", "ALL")
+                                )
+                        )
                         .orderByAsc("send_time")
         );
     }

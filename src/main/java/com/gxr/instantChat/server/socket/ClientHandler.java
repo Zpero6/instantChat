@@ -34,6 +34,7 @@ public class ClientHandler implements Runnable {
             }
         } catch (Exception e) {
             System.out.println("客户端异常断开：" + username);
+            e.printStackTrace();
         } finally {
             OnlineUserManager.removeUser(username);
             broadcastOnlineUsers();

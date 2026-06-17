@@ -58,8 +58,28 @@ public class HistoryDialog extends JDialog {
             if (message.getTime() != null && !message.getTime().isEmpty()) {
                 builder.append("[").append(message.getTime()).append("] ");
             }
-            builder.append(sender).append("：").append(message.getContent()).append("\n\n");
+            builder.append(sender).append("：").append(getDisplayContent(message)).append("\n\n");
         }
         return builder.toString();
+    }
+
+    private String getDisplayContent(Message message) {
+        if (message.getFileName() != null && !message.getFileName().isEmpty()) {
+            return "[文件] " + message.getFileName() + "（" + formatFileSize(message.getFileSize()) + "）";
+        }
+        return message.getContent();
+    }
+
+    private String formatFileSize(Long fileSize) {
+        if (fileSize == null) {
+            return "未知大小";
+        }
+        if (fileSize < 1024) {
+            return fileSize + "B";
+        }
+        if (fileSize < 1024 * 1024) {
+            return String.format("%.1fKB", fileSize / 1024.0);
+        }
+        return String.format("%.1fMB", fileSize / 1024.0 / 1024.0);
     }
 }

@@ -26,6 +26,15 @@ public class MessageDispatcher {
     }
 
     public void dispatch(Message message, ClientHandler clientHandler) {
+        try {
+            doDispatch(message, clientHandler);
+        } catch (Exception e) {
+            e.printStackTrace();
+            sendError(clientHandler, "服务器处理失败：" + e.getMessage());
+        }
+    }
+
+    private void doDispatch(Message message, ClientHandler clientHandler) {
         switch (message.getType()) {
             case MessageType.REGISTER:
                 handleRegister(message, clientHandler);
@@ -41,6 +50,9 @@ public class MessageDispatcher {
                 break;
             case MessageType.HISTORY_REQUEST:
                 handleHistoryRequest(message, clientHandler);
+                break;
+            case MessageType.FILE:
+                handleFileMessage(message, clientHandler);
                 break;
             case MessageType.LOGOUT:
                 handleLogout(clientHandler);
@@ -98,6 +110,24 @@ public class MessageDispatcher {
         OnlineUserManager.broadcast(JsonUtils.toJson(message));
     }
 
+    private void handleFileMessage(Message message, ClientHandler clientHandler) {
+        if ("ALL".equals(message.getTo())) {
+            chatMessageService.saveMessage(toFileHistoryMessage(message));
+            OnlineUserManager.broadcast(JsonUtils.toJson(message));
+            return;
+        }
+
+        ClientHandler targetHandler = OnlineUserManager.getHandler(message.getTo());
+        if (targetHandler == null) {
+            sendError(clientHandler, "用户不在线：" + message.getTo());
+            return;
+        }
+
+        chatMessageService.saveMessage(toFileHistoryMessage(message));
+        targetHandler.send(message);
+        clientHandler.send(message);
+    }
+
     private void handleHistoryRequest(Message message, ClientHandler clientHandler) {
         List<ChatMessage> records;
         if ("ALL".equals(message.getTo())) {
@@ -152,5 +182,16 @@ public class MessageDispatcher {
             messages.add(message);
         }
         return messages;
+    }
+
+    private Message toFileHistoryMessage(Message source) {
+        Message historyMessage = new Message();
+        historyMessage.setType(MessageType.FILE);
+        historyMessage.setFrom(source.getFrom());
+        historyMessage.setTo(source.getTo());
+        historyMessage.setFileName(source.getFileName());
+        historyMessage.setFileSize(source.getFileSize());
+        historyMessage.setContent("[文件] " + source.getFileName());
+        return historyMessage;
     }
 }
