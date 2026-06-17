@@ -344,16 +344,6 @@ public class MainFrame extends JFrame {
     }
 
     private void saveReceivedFile(Message message) {
-        int choice = JOptionPane.showConfirmDialog(
-                this,
-                message.getFrom() + " 发来文件：" + message.getFileName() + "（" + formatFileSize(message.getFileSize()) + "），是否保存？",
-                "接收文件",
-                JOptionPane.YES_NO_OPTION
-        );
-        if (choice != JOptionPane.YES_OPTION) {
-            return;
-        }
-
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setSelectedFile(new File(message.getFileName()));
         int result = fileChooser.showSaveDialog(this);
