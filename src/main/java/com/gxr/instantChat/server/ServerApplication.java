@@ -1,6 +1,6 @@
 package com.gxr.instantChat.server;
 
-import com.gxr.instantChat.server.service.UserService;
+import com.gxr.instantChat.server.socket.ChatSocketServer;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -16,13 +16,7 @@ public class ServerApplication {
     }
 
     @Bean
-    public CommandLineRunner testUserService(UserService userService) {
-        return args -> {
-            boolean registerResult = userService.register("test", "123456");
-            boolean loginResult = userService.login("test", "123456");
-
-            System.out.println("注册结果：" + registerResult);
-            System.out.println("登录结果：" + loginResult);
-        };
+    public CommandLineRunner startSocketServer(ChatSocketServer chatSocketServer) {
+        return args -> chatSocketServer.start();
     }
 }
