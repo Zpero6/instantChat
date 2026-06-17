@@ -3,12 +3,19 @@ package com.gxr.instantChat.server.socket;
 import com.gxr.instantChat.common.JsonUtils;
 import com.gxr.instantChat.common.Message;
 import com.gxr.instantChat.common.MessageType;
+import com.gxr.instantChat.server.entity.ChatMessage;
 import com.gxr.instantChat.server.service.ChatMessageService;
 import com.gxr.instantChat.server.service.UserService;
 import org.springframework.stereotype.Component;
 
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+
 @Component
 public class MessageDispatcher {
+
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final UserService userService;
     private final ChatMessageService chatMessageService;
@@ -31,6 +38,9 @@ public class MessageDispatcher {
                 break;
             case MessageType.GROUP_CHAT:
                 handleGroupChat(message);
+                break;
+            case MessageType.HISTORY_REQUEST:
+                handleHistoryRequest(message, clientHandler);
                 break;
             case MessageType.LOGOUT:
                 handleLogout(clientHandler);
@@ -88,6 +98,23 @@ public class MessageDispatcher {
         OnlineUserManager.broadcast(JsonUtils.toJson(message));
     }
 
+    private void handleHistoryRequest(Message message, ClientHandler clientHandler) {
+        List<ChatMessage> records;
+        if ("ALL".equals(message.getTo())) {
+            records = chatMessageService.queryGroupHistory();
+        } else {
+            records = chatMessageService.queryPrivateHistory(message.getFrom(), message.getTo());
+        }
+
+        Message result = new Message();
+        result.setType(MessageType.HISTORY_RESULT);
+        result.setFrom(message.getFrom());
+        result.setTo(message.getTo());
+        result.setHistoryMessages(toHistoryMessages(records));
+
+        clientHandler.send(result);
+    }
+
     private void handleLogout(ClientHandler clientHandler) {
         OnlineUserManager.removeUser(clientHandler.getUsername());
         broadcastOnlineUsers();
@@ -108,5 +135,22 @@ public class MessageDispatcher {
         message.setReason(reason);
 
         clientHandler.send(message);
+    }
+
+    private List<Message> toHistoryMessages(List<ChatMessage> records) {
+        List<Message> messages = new ArrayList<>();
+        for (ChatMessage record : records) {
+            Message message = new Message();
+            message.setType(record.getMsgType());
+            message.setFrom(record.getSender());
+            message.setTo(record.getReceiver());
+            message.setContent(record.getContent());
+            message.setFileName(record.getFileName());
+            if (record.getSendTime() != null) {
+                message.setTime(record.getSendTime().format(TIME_FORMATTER));
+            }
+            messages.add(message);
+        }
+        return messages;
     }
 }

@@ -32,6 +32,7 @@ public class MainFrame extends JFrame {
     private JScrollPane messageScrollPane;
 
     private final JTextArea inputArea = new JTextArea();
+    private final JButton historyButton = new JButton("历史记录");
     private final JButton sendButton = new JButton("发送");
 
     private final Map<String, List<Message>> conversationMessages = new HashMap<>();
@@ -132,6 +133,10 @@ public class MainFrame extends JFrame {
         JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 14, 10));
         actionPanel.setBackground(Color.WHITE);
 
+        historyButton.setFont(new Font("Microsoft YaHei", Font.PLAIN, 14));
+        historyButton.setPreferredSize(new Dimension(100, 34));
+        actionPanel.add(historyButton);
+
         sendButton.setFont(new Font("Microsoft YaHei", Font.PLAIN, 14));
         sendButton.setPreferredSize(new Dimension(90, 34));
         actionPanel.add(sendButton);
@@ -153,6 +158,7 @@ public class MainFrame extends JFrame {
         });
 
         sendButton.addActionListener(e -> sendMessage());
+        historyButton.addActionListener(e -> requestHistory());
 
         inputArea.getInputMap().put(
                 KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK),
@@ -189,6 +195,9 @@ public class MainFrame extends JFrame {
                     break;
                 case MessageType.GROUP_CHAT:
                     addGroupMessage(message);
+                    break;
+                case MessageType.HISTORY_RESULT:
+                    showHistoryDialog(message);
                     break;
                 case MessageType.ERROR:
                     JOptionPane.showMessageDialog(this, message.getReason());
@@ -269,6 +278,21 @@ public class MainFrame extends JFrame {
         socketClient.send(message);
         inputArea.setText("");
         inputArea.requestFocusInWindow();
+    }
+
+    private void requestHistory() {
+        Message message = new Message();
+        message.setType(MessageType.HISTORY_REQUEST);
+        message.setFrom(username);
+        message.setTo(GROUP_KEY.equals(currentConversation) ? "ALL" : currentConversation);
+
+        socketClient.send(message);
+    }
+
+    private void showHistoryDialog(Message message) {
+        String title = "ALL".equals(message.getTo()) ? GROUP_TITLE : message.getTo();
+        HistoryDialog historyDialog = new HistoryDialog(this, title, message.getHistoryMessages(), username);
+        historyDialog.setVisible(true);
     }
 
     private void renderCurrentConversation() {
