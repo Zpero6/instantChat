@@ -44,4 +44,8 @@ public class SocketClient {
         } catch (Exception ignored) {
         }
     }
+
+    public void setMessageConsumer(Consumer<Message> messageConsumer) {
+        this.messageConsumer = messageConsumer;
+    }
 }

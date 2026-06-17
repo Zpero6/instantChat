@@ -101,6 +101,7 @@ public class LoginFrame extends JFrame {
         if (Boolean.TRUE.equals(message.getSuccess())) {
             String username = usernameField.getText().trim();
             MainFrame mainFrame = new MainFrame(username, socketClient);
+            socketClient.setMessageConsumer(mainFrame::handleMessage);
             mainFrame.setVisible(true);
             dispose();
         }
