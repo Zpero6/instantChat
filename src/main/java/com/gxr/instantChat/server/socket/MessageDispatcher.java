@@ -1,9 +1,9 @@
 package com.gxr.instantChat.server.socket;
 
-
 import com.gxr.instantChat.common.JsonUtils;
 import com.gxr.instantChat.common.Message;
 import com.gxr.instantChat.common.MessageType;
+import com.gxr.instantChat.server.service.ChatMessageService;
 import com.gxr.instantChat.server.service.UserService;
 import org.springframework.stereotype.Component;
 
@@ -11,9 +11,11 @@ import org.springframework.stereotype.Component;
 public class MessageDispatcher {
 
     private final UserService userService;
+    private final ChatMessageService chatMessageService;
 
-    public MessageDispatcher(UserService userService) {
+    public MessageDispatcher(UserService userService, ChatMessageService chatMessageService) {
         this.userService = userService;
+        this.chatMessageService = chatMessageService;
     }
 
     public void dispatch(Message message, ClientHandler clientHandler) {
@@ -23,6 +25,12 @@ public class MessageDispatcher {
                 break;
             case MessageType.LOGIN:
                 handleLogin(message, clientHandler);
+                break;
+            case MessageType.PRIVATE_CHAT:
+                handlePrivateChat(message, clientHandler);
+                break;
+            case MessageType.GROUP_CHAT:
+                handleGroupChat(message);
                 break;
             case MessageType.LOGOUT:
                 handleLogout(clientHandler);
@@ -58,6 +66,24 @@ public class MessageDispatcher {
             OnlineUserManager.addUser(message.getFrom(), clientHandler);
             broadcastOnlineUsers();
         }
+    }
+
+    private void handlePrivateChat(Message message, ClientHandler clientHandler) {
+        chatMessageService.saveMessage(message);
+
+        ClientHandler targetHandler = OnlineUserManager.getHandler(message.getTo());
+        if (targetHandler != null) {
+            targetHandler.send(message);
+        } else {
+            sendError(clientHandler, "用户不在线：" + message.getTo());
+        }
+
+        clientHandler.send(message);
+    }
+
+    private void handleGroupChat(Message message) {
+        chatMessageService.saveMessage(message);
+        OnlineUserManager.broadcast(JsonUtils.toJson(message));
     }
 
     private void handleLogout(ClientHandler clientHandler) {
