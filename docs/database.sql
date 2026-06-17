@@ -1,0 +1,21 @@
+CREATE DATABASE IF NOT EXISTS instant_chat DEFAULT CHARACTER SET utf8mb4;
+
+USE instant_chat;
+
+CREATE TABLE IF NOT EXISTS user (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(100) NOT NULL,
+    nickname VARCHAR(50),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS chat_message (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    msg_type VARCHAR(20) NOT NULL,
+    sender VARCHAR(50) NOT NULL,
+    receiver VARCHAR(50),
+    content TEXT,
+    file_name VARCHAR(255),
+    send_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
