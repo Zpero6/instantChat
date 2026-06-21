@@ -57,4 +57,51 @@ public class ChatMessageService {
                         .orderByAsc("send_time")
         );
     }
+
+    public List<ChatMessage> searchPrivateHistory(String user1, String user2, String keyword) {
+        String searchText = keyword == null ? "" : keyword.trim();
+        if (searchText.isEmpty()) {
+            return List.of();
+        }
+
+        return chatMessageMapper.selectList(
+                new QueryWrapper<ChatMessage>()
+                        .and(wrapper -> wrapper
+                                .eq("sender", user1).eq("receiver", user2)
+                                .or()
+                                .eq("sender", user2).eq("receiver", user1)
+                        )
+                        .in("msg_type", MessageType.PRIVATE_CHAT, MessageType.FILE)
+                        .and(wrapper -> wrapper
+                                .like("content", searchText)
+                                .or()
+                                .like("file_name", searchText)
+                        )
+                        .orderByAsc("send_time")
+        );
+    }
+
+    public List<ChatMessage> searchGroupHistory(String keyword) {
+        String searchText = keyword == null ? "" : keyword.trim();
+        if (searchText.isEmpty()) {
+            return List.of();
+        }
+
+        return chatMessageMapper.selectList(
+                new QueryWrapper<ChatMessage>()
+                        .and(wrapper -> wrapper
+                                .eq("msg_type", MessageType.GROUP_CHAT)
+                                .or(groupFile -> groupFile
+                                        .eq("msg_type", MessageType.FILE)
+                                        .eq("receiver", "ALL")
+                                )
+                        )
+                        .and(wrapper -> wrapper
+                                .like("content", searchText)
+                                .or()
+                                .like("file_name", searchText)
+                        )
+                        .orderByAsc("send_time")
+        );
+    }
 }

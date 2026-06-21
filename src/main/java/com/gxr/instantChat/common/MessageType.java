@@ -17,6 +17,11 @@ public class MessageType {
     public static final String HISTORY_REQUEST = "HISTORY_REQUEST";
     public static final String HISTORY_RESULT = "HISTORY_RESULT";
 
+    public static final String SEARCH_REQUEST = "SEARCH_REQUEST";
+    public static final String SEARCH_RESULT = "SEARCH_RESULT";
+
+    public static final String READ_RECEIPT = "READ_RECEIPT";
+
     public static final String FILE = "FILE";
 
     public static final String LOGOUT = "LOGOUT";

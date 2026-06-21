@@ -33,6 +33,9 @@ public class MainFrame extends JFrame {
     private static final String GROUP_KEY = "__GROUP__";
     private static final String GROUP_TITLE = "公共聊天室";
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
+    private static final int TEXT_BUBBLE_MIN_TEXT_WIDTH = 32;
+    private static final int TEXT_BUBBLE_HORIZONTAL_PADDING = 24;
+    private static final int TEXT_BUBBLE_VERTICAL_PADDING = 16;
 
     private final String username;
     private final SocketClient socketClient;
@@ -41,6 +44,9 @@ public class MainFrame extends JFrame {
     private final JList<String> contactList = new JList<>(contactModel);
 
     private final JLabel chatTitleLabel = new JLabel(GROUP_TITLE);
+    private final JTextField searchField = new JTextField();
+    private final JButton searchButton = new JButton("搜索");
+    private final JButton clearSearchButton = new JButton("清空");
     private final JPanel messagePanel = new JPanel();
     private JScrollPane messageScrollPane;
 
@@ -49,9 +55,12 @@ public class MainFrame extends JFrame {
     private final JButton sendButton = new JButton("发送");
 
     private final Map<String, List<Message>> conversationMessages = new HashMap<>();
+    private final Map<String, Integer> unreadCounts = new HashMap<>();
     private final Set<String> loadedHistoryConversations = new HashSet<>();
     private final Set<String> loadingHistoryConversations = new HashSet<>();
     private String currentConversation = GROUP_KEY;
+    private boolean showingSearchResult = false;
+    private String searchConversation = GROUP_KEY;
 
     public MainFrame(String username, SocketClient socketClient) {
         this.username = username;
@@ -116,6 +125,23 @@ public class MainFrame extends JFrame {
         chatTitleLabel.setBorder(new EmptyBorder(0, 20, 0, 20));
         titlePanel.add(chatTitleLabel, BorderLayout.CENTER);
 
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 11));
+        searchPanel.setOpaque(false);
+
+        searchField.setFont(new Font("Microsoft YaHei", Font.PLAIN, 13));
+        searchField.setPreferredSize(new Dimension(170, 32));
+        searchPanel.add(searchField);
+
+        searchButton.setFont(new Font("Microsoft YaHei", Font.PLAIN, 13));
+        searchButton.setPreferredSize(new Dimension(64, 32));
+        searchPanel.add(searchButton);
+
+        clearSearchButton.setFont(new Font("Microsoft YaHei", Font.PLAIN, 13));
+        clearSearchButton.setPreferredSize(new Dimension(64, 32));
+        searchPanel.add(clearSearchButton);
+
+        titlePanel.add(searchPanel, BorderLayout.EAST);
+
         messagePanel.setLayout(new BoxLayout(messagePanel, BoxLayout.Y_AXIS));
         messagePanel.setBackground(new Color(245, 245, 245));
         messagePanel.setBorder(new EmptyBorder(12, 0, 12, 0));
@@ -167,6 +193,8 @@ public class MainFrame extends JFrame {
                 String selected = contactList.getSelectedValue();
                 if (selected != null) {
                     currentConversation = GROUP_TITLE.equals(selected) ? GROUP_KEY : selected;
+                    clearSearchState();
+                    markConversationReadAndNotify(currentConversation);
                     chatTitleLabel.setText(selected);
                     requestConversationHistory(currentConversation);
                     renderCurrentConversation();
@@ -176,6 +204,9 @@ public class MainFrame extends JFrame {
 
         sendButton.addActionListener(e -> sendMessage());
         fileButton.addActionListener(e -> sendFile());
+        searchButton.addActionListener(e -> searchMessages());
+        clearSearchButton.addActionListener(e -> clearSearchResults());
+        searchField.addActionListener(e -> searchMessages());
 
         inputArea.getInputMap().put(
                 KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK),
@@ -215,6 +246,12 @@ public class MainFrame extends JFrame {
                     break;
                 case MessageType.HISTORY_RESULT:
                     loadHistoryMessages(message);
+                    break;
+                case MessageType.SEARCH_RESULT:
+                    loadSearchMessages(message);
+                    break;
+                case MessageType.READ_RECEIPT:
+                    handleReadReceipt(message);
                     break;
                 case MessageType.FILE:
                     handleFileMessage(message);
@@ -259,22 +296,41 @@ public class MainFrame extends JFrame {
         return GROUP_KEY.equals(currentConversation) ? GROUP_TITLE : currentConversation;
     }
 
+    private String toConversationKey(String displayName) {
+        return GROUP_TITLE.equals(displayName) ? GROUP_KEY : displayName;
+    }
+
     private void addPrivateMessage(Message message) {
         String conversationKey = username.equals(message.getFrom()) ? message.getTo() : message.getFrom();
         conversationMessages.computeIfAbsent(conversationKey, key -> new ArrayList<>()).add(message);
+        boolean ownMessage = username.equals(message.getFrom());
 
         if (conversationKey.equals(currentConversation)) {
-            appendMessageBubble(message);
-            scrollToBottom();
+            markConversationRead(conversationKey);
+            if (!ownMessage) {
+                sendReadReceipt(conversationKey);
+            }
+            if (!isShowingSearchForCurrentConversation()) {
+                appendMessageBubble(message);
+                scrollToBottom();
+            }
+        } else if (!ownMessage) {
+            increaseUnread(conversationKey);
         }
     }
 
     private void addGroupMessage(Message message) {
         conversationMessages.computeIfAbsent(GROUP_KEY, key -> new ArrayList<>()).add(message);
+        boolean ownMessage = username.equals(message.getFrom());
 
         if (GROUP_KEY.equals(currentConversation)) {
-            appendMessageBubble(message);
-            scrollToBottom();
+            markConversationRead(GROUP_KEY);
+            if (!isShowingSearchForCurrentConversation()) {
+                appendMessageBubble(message);
+                scrollToBottom();
+            }
+        } else if (!ownMessage) {
+            increaseUnread(GROUP_KEY);
         }
     }
 
@@ -294,6 +350,7 @@ public class MainFrame extends JFrame {
         } else {
             message.setType(MessageType.PRIVATE_CHAT);
             message.setTo(currentConversation);
+            message.setRead(false);
         }
 
         socketClient.send(message);
@@ -325,6 +382,9 @@ public class MainFrame extends JFrame {
             message.setType(MessageType.FILE);
             message.setFrom(username);
             message.setTo(GROUP_KEY.equals(currentConversation) ? "ALL" : currentConversation);
+            if (!"ALL".equals(message.getTo())) {
+                message.setRead(false);
+            }
             message.setFileName(file.getName());
             message.setFileSize(file.length());
             message.setContent(Base64.getEncoder().encodeToString(fileBytes));
@@ -333,6 +393,38 @@ public class MainFrame extends JFrame {
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, "读取文件失败：" + ex.getMessage());
         }
+    }
+
+    private void searchMessages() {
+        String keyword = searchField.getText().trim();
+        if (keyword.isEmpty()) {
+            clearSearchResults();
+            return;
+        }
+
+        searchConversation = currentConversation;
+        showingSearchResult = true;
+        chatTitleLabel.setText(getSelectedDisplayName() + " - 搜索：" + keyword);
+
+        Message message = new Message();
+        message.setType(MessageType.SEARCH_REQUEST);
+        message.setFrom(username);
+        message.setTo(GROUP_KEY.equals(currentConversation) ? "ALL" : currentConversation);
+        message.setKeyword(keyword);
+
+        socketClient.send(message);
+    }
+
+    private void clearSearchResults() {
+        clearSearchState();
+        chatTitleLabel.setText(getSelectedDisplayName());
+        renderCurrentConversation();
+    }
+
+    private void clearSearchState() {
+        showingSearchResult = false;
+        searchConversation = currentConversation;
+        searchField.setText("");
     }
 
     private void handleFileMessage(Message message) {
@@ -390,6 +482,31 @@ public class MainFrame extends JFrame {
         }
     }
 
+    private void loadSearchMessages(Message message) {
+        String conversationKey = "ALL".equals(message.getTo()) ? GROUP_KEY : message.getTo();
+        if (!conversationKey.equals(currentConversation)) {
+            return;
+        }
+
+        showingSearchResult = true;
+        searchConversation = conversationKey;
+        chatTitleLabel.setText(getSelectedDisplayName() + " - 搜索：" + message.getKeyword());
+
+        messagePanel.removeAll();
+        List<Message> results = message.getHistoryMessages() == null ? new ArrayList<>() : message.getHistoryMessages();
+        if (results.isEmpty()) {
+            addEmptyHint("没有找到相关聊天记录");
+        } else {
+            for (Message result : results) {
+                appendMessageBubble(result);
+            }
+        }
+
+        messagePanel.revalidate();
+        messagePanel.repaint();
+        scrollToBottom();
+    }
+
     private void renderCurrentConversation() {
         renderCurrentConversation(true);
     }
@@ -409,6 +526,78 @@ public class MainFrame extends JFrame {
         if (scrollToBottomAfterRender) {
             scrollToBottom();
         }
+    }
+
+    private void addEmptyHint(String text) {
+        JLabel hintLabel = new JLabel(text);
+        hintLabel.setFont(new Font("Microsoft YaHei", Font.PLAIN, 13));
+        hintLabel.setForeground(new Color(140, 140, 140));
+        hintLabel.setBorder(new EmptyBorder(30, 0, 0, 0));
+        hintLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        messagePanel.add(hintLabel);
+    }
+
+    private boolean isShowingSearchForCurrentConversation() {
+        return showingSearchResult && currentConversation.equals(searchConversation);
+    }
+
+    private void increaseUnread(String conversationKey) {
+        unreadCounts.merge(conversationKey, 1, Integer::sum);
+        contactList.repaint();
+    }
+
+    private void markConversationReadAndNotify(String conversationKey) {
+        markConversationRead(conversationKey);
+        sendReadReceipt(conversationKey);
+    }
+
+    private void markConversationRead(String conversationKey) {
+        if (unreadCounts.remove(conversationKey) != null) {
+            contactList.repaint();
+        }
+    }
+
+    private void sendReadReceipt(String conversationKey) {
+        if (GROUP_KEY.equals(conversationKey) || conversationKey == null || conversationKey.equals(username)) {
+            return;
+        }
+
+        Message receipt = new Message();
+        receipt.setType(MessageType.READ_RECEIPT);
+        receipt.setFrom(username);
+        receipt.setTo(conversationKey);
+        receipt.setRead(true);
+
+        socketClient.send(receipt);
+    }
+
+    private void handleReadReceipt(Message receipt) {
+        String conversationKey = receipt.getFrom();
+        List<Message> messages = conversationMessages.get(conversationKey);
+        if (messages == null) {
+            return;
+        }
+
+        boolean changed = false;
+        for (Message message : messages) {
+            if (isOwnPrivateMessageTo(message, conversationKey) && Boolean.FALSE.equals(message.getRead())) {
+                message.setRead(true);
+                changed = true;
+            }
+        }
+
+        if (changed && conversationKey.equals(currentConversation) && !isShowingSearchForCurrentConversation()) {
+            renderCurrentConversation(false);
+        }
+    }
+
+    private boolean isOwnPrivateMessageTo(Message message, String receiver) {
+        boolean privateText = MessageType.PRIVATE_CHAT.equals(message.getType());
+        boolean privateFile = MessageType.FILE.equals(message.getType()) && !"ALL".equals(message.getTo());
+        return (privateText || privateFile)
+                && username.equals(message.getFrom())
+                && receiver.equals(message.getTo())
+                && message.getRead() != null;
     }
 
     private void appendMessageBubble(Message message) {
@@ -434,6 +623,12 @@ public class MainFrame extends JFrame {
         bubbleWrapper.add(Box.createVerticalStrut(4));
         bubbleWrapper.add(bubbleContent);
 
+        JLabel readStatusLabel = createReadStatusLabel(message, ownMessage);
+        if (readStatusLabel != null) {
+            bubbleWrapper.add(Box.createVerticalStrut(3));
+            bubbleWrapper.add(readStatusLabel);
+        }
+
         JLabel avatarLabel = new JLabel(new DefaultAvatarIcon(36));
         avatarLabel.setBorder(new EmptyBorder(16, 0, 0, 0));
 
@@ -451,9 +646,22 @@ public class MainFrame extends JFrame {
         messagePanel.repaint();
     }
 
-    private String toBubbleHtml(String content) {
-        String escaped = escapeHtml(content == null ? "" : content).replace("\n", "<br>");
-        return "<html><body style='width: 320px;'>" + escaped + "</body></html>";
+    private JLabel createReadStatusLabel(Message message, boolean ownMessage) {
+        if (!ownMessage || message.getRead() == null) {
+            return null;
+        }
+
+        boolean privateText = MessageType.PRIVATE_CHAT.equals(message.getType());
+        boolean privateFile = MessageType.FILE.equals(message.getType()) && !"ALL".equals(message.getTo());
+        if (!privateText && !privateFile) {
+            return null;
+        }
+
+        JLabel label = new JLabel(Boolean.TRUE.equals(message.getRead()) ? "已读" : "未读");
+        label.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
+        label.setForeground(Boolean.TRUE.equals(message.getRead()) ? new Color(90, 150, 80) : new Color(150, 150, 150));
+        label.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        return label;
     }
 
     private JComponent createBubbleContent(Message message, boolean ownMessage) {
@@ -461,18 +669,11 @@ public class MainFrame extends JFrame {
             return createFileBubble(message, ownMessage);
         }
 
-        JLabel bubbleLabel = new JLabel(toBubbleHtml(message.getContent()));
-        bubbleLabel.setFont(new Font("Microsoft YaHei", Font.PLAIN, 15));
-        bubbleLabel.setOpaque(true);
-        bubbleLabel.setBackground(getBubbleBackground(ownMessage));
-        bubbleLabel.setBorder(new EmptyBorder(8, 12, 8, 12));
-        return bubbleLabel;
+        return new TextBubblePanel(message.getContent(), ownMessage);
     }
 
     private JComponent createFileBubble(Message message, boolean ownMessage) {
-        JPanel bubblePanel = new JPanel(new BorderLayout(10, 0));
-        bubblePanel.setOpaque(true);
-        bubblePanel.setBackground(getBubbleBackground(ownMessage));
+        JPanel bubblePanel = new RoundedBubblePanel(new BorderLayout(10, 0), ownMessage);
         bubblePanel.setBorder(new EmptyBorder(8, 10, 8, 10));
         bindFilePreviewActions(bubblePanel, message);
 
@@ -768,14 +969,6 @@ public class MainFrame extends JFrame {
         return String.format("%.1fMB", fileSize / 1024.0 / 1024.0);
     }
 
-    private String escapeHtml(String text) {
-        return text
-                .replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;");
-    }
-
     private void scrollToBottom() {
         SwingUtilities.invokeLater(() -> {
             JScrollBar verticalBar = messageScrollPane.getVerticalScrollBar();
@@ -818,10 +1011,86 @@ public class MainFrame extends JFrame {
         return value == null ? "" : value;
     }
 
+    private class TextBubblePanel extends RoundedBubblePanel {
+
+        TextBubblePanel(String content, boolean ownMessage) {
+            super(new BorderLayout(), ownMessage);
+            setBorder(new EmptyBorder(8, 12, 8, 12));
+
+            String text = content == null ? "" : content;
+            JTextArea textArea = new JTextArea(text);
+            textArea.setEditable(false);
+            textArea.setFocusable(false);
+            textArea.setOpaque(false);
+            textArea.setLineWrap(true);
+            textArea.setWrapStyleWord(false);
+            textArea.setFont(new Font("Microsoft YaHei", Font.PLAIN, 15));
+            textArea.setForeground(new Color(25, 25, 25));
+
+            FontMetrics metrics = textArea.getFontMetrics(textArea.getFont());
+            int textWidth = calculateTextWidth(text, metrics);
+            textArea.setSize(new Dimension(textWidth, Short.MAX_VALUE));
+            Dimension textSize = textArea.getPreferredSize();
+            textArea.setPreferredSize(new Dimension(textWidth, textSize.height));
+
+            int bubbleWidth = textWidth + TEXT_BUBBLE_HORIZONTAL_PADDING;
+            int bubbleHeight = textSize.height + TEXT_BUBBLE_VERTICAL_PADDING;
+            setPreferredSize(new Dimension(bubbleWidth, bubbleHeight));
+            setMaximumSize(new Dimension(bubbleWidth, bubbleHeight));
+            add(textArea, BorderLayout.CENTER);
+        }
+
+        private int calculateTextWidth(String text, FontMetrics metrics) {
+            int maxTextWidth = calculateMaxTextWidth();
+            int longestLineWidth = 0;
+            String[] lines = text.split("\\R", -1);
+            for (String line : lines) {
+                longestLineWidth = Math.max(longestLineWidth, metrics.stringWidth(line));
+            }
+            int contentWidth = Math.max(TEXT_BUBBLE_MIN_TEXT_WIDTH, longestLineWidth + 4);
+            return Math.min(maxTextWidth, contentWidth);
+        }
+
+        private int calculateMaxTextWidth() {
+            int viewportWidth = 0;
+            if (messageScrollPane != null && messageScrollPane.getViewport() != null) {
+                viewportWidth = messageScrollPane.getViewport().getWidth();
+            }
+            if (viewportWidth <= 0) {
+                viewportWidth = Math.max(520, MainFrame.this.getWidth() - 240);
+            }
+
+            int maxBubbleWidth = (int) (viewportWidth * 0.72);
+            return Math.max(160, maxBubbleWidth - TEXT_BUBBLE_HORIZONTAL_PADDING);
+        }
+    }
+
+    private class RoundedBubblePanel extends JPanel {
+
+        private final boolean ownMessage;
+
+        RoundedBubblePanel(LayoutManager layout, boolean ownMessage) {
+            super(layout);
+            this.ownMessage = ownMessage;
+            setOpaque(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(getBubbleBackground(ownMessage));
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
     private class ContactCellRenderer extends JPanel implements ListCellRenderer<String> {
 
         private final JLabel avatarLabel = new JLabel(new DefaultAvatarIcon(36));
         private final JLabel nameLabel = new JLabel();
+        private final JLabel unreadLabel = new UnreadBadgeLabel();
 
         ContactCellRenderer() {
             setLayout(new BorderLayout(12, 0));
@@ -831,8 +1100,15 @@ public class MainFrame extends JFrame {
             nameLabel.setFont(new Font("Microsoft YaHei", Font.PLAIN, 15));
             nameLabel.setForeground(new Color(35, 35, 35));
 
+            unreadLabel.setFont(new Font("Microsoft YaHei", Font.BOLD, 9));
+            unreadLabel.setForeground(Color.WHITE);
+            unreadLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            unreadLabel.setPreferredSize(new Dimension(18, 18));
+            unreadLabel.setOpaque(false);
+
             add(avatarLabel, BorderLayout.WEST);
             add(nameLabel, BorderLayout.CENTER);
+            add(unreadLabel, BorderLayout.EAST);
         }
 
         @Override
@@ -844,8 +1120,26 @@ public class MainFrame extends JFrame {
                 boolean cellHasFocus
         ) {
             nameLabel.setText(value);
+            int unreadCount = unreadCounts.getOrDefault(toConversationKey(value), 0);
+            unreadLabel.setText(unreadCount > 9 ? "9+" : String.valueOf(unreadCount));
+            unreadLabel.setVisible(unreadCount > 0);
             setBackground(isSelected ? new Color(225, 225, 225) : new Color(248, 248, 248));
             return this;
+        }
+    }
+
+    private static class UnreadBadgeLabel extends JLabel {
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(new Color(245, 81, 77));
+            int size = Math.min(getWidth(), getHeight());
+            int x = (getWidth() - size) / 2;
+            int y = (getHeight() - size) / 2;
+            g2.fillOval(x, y, size, size);
+            g2.dispose();
+            super.paintComponent(g);
         }
     }
 }

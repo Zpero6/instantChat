@@ -17,6 +17,8 @@ public class Message {
      * success         登录/注册是否成功
      * reason          失败原因
      * onlineUsers     在线用户列表
+     * keyword         搜索关键词
+     * read            消息是否已读
      * historyMessages 历史聊天记录
      * */
 
@@ -38,6 +40,10 @@ public class Message {
     private Boolean success;
 
     private String reason;
+
+    private String keyword;
+
+    private Boolean read;
 
     private List<String> onlineUsers;
 

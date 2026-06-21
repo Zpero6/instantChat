@@ -51,6 +51,12 @@ public class MessageDispatcher {
             case MessageType.HISTORY_REQUEST:
                 handleHistoryRequest(message, clientHandler);
                 break;
+            case MessageType.SEARCH_REQUEST:
+                handleSearchRequest(message, clientHandler);
+                break;
+            case MessageType.READ_RECEIPT:
+                handleReadReceipt(message);
+                break;
             case MessageType.FILE:
                 handleFileMessage(message, clientHandler);
                 break;
@@ -143,6 +149,31 @@ public class MessageDispatcher {
         result.setHistoryMessages(toHistoryMessages(records));
 
         clientHandler.send(result);
+    }
+
+    private void handleSearchRequest(Message message, ClientHandler clientHandler) {
+        List<ChatMessage> records;
+        if ("ALL".equals(message.getTo())) {
+            records = chatMessageService.searchGroupHistory(message.getKeyword());
+        } else {
+            records = chatMessageService.searchPrivateHistory(message.getFrom(), message.getTo(), message.getKeyword());
+        }
+
+        Message result = new Message();
+        result.setType(MessageType.SEARCH_RESULT);
+        result.setFrom(message.getFrom());
+        result.setTo(message.getTo());
+        result.setKeyword(message.getKeyword());
+        result.setHistoryMessages(toHistoryMessages(records));
+
+        clientHandler.send(result);
+    }
+
+    private void handleReadReceipt(Message message) {
+        ClientHandler targetHandler = OnlineUserManager.getHandler(message.getTo());
+        if (targetHandler != null) {
+            targetHandler.send(message);
+        }
     }
 
     private void handleLogout(ClientHandler clientHandler) {
