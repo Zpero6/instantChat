@@ -10,6 +10,10 @@ import java.awt.*;
 
 public class LoginFrame extends JFrame {
 
+    private static final String USERNAME_PATTERN = "^[A-Za-z0-9_]{3,20}$";
+    private static final int MIN_PASSWORD_LENGTH = 6;
+    private static final int MAX_PASSWORD_LENGTH = 20;
+
     private final JTextField usernameField = new JTextField();
     private final JPasswordField passwordField = new JPasswordField();
     private final JButton loginButton = new JButton("登录");
@@ -166,6 +170,9 @@ public class LoginFrame extends JFrame {
             JOptionPane.showMessageDialog(this, "尚未连接服务器，请先启动服务端后重新打开客户端");
             return;
         }
+        if (!validateUserInput()) {
+            return;
+        }
         Message message = buildUserMessage(MessageType.LOGIN);
         socketClient.send(message);
     }
@@ -173,6 +180,9 @@ public class LoginFrame extends JFrame {
     private void sendRegister() {
         if (!socketClient.isConnected()) {
             JOptionPane.showMessageDialog(this, "尚未连接服务器，请先启动服务端后重新打开客户端");
+            return;
+        }
+        if (!validateUserInput()) {
             return;
         }
         Message message = buildUserMessage(MessageType.REGISTER);
@@ -185,6 +195,39 @@ public class LoginFrame extends JFrame {
         message.setFrom(usernameField.getText().trim());
         message.setContent(new String(passwordField.getPassword()));
         return message;
+    }
+
+    private boolean validateUserInput() {
+        String username = usernameField.getText().trim();
+        String password = new String(passwordField.getPassword());
+
+        if (username.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "用户名不能为空");
+            usernameField.requestFocusInWindow();
+            return false;
+        }
+        if (password.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "密码不能为空");
+            passwordField.requestFocusInWindow();
+            return false;
+        }
+        if (!username.matches(USERNAME_PATTERN)) {
+            JOptionPane.showMessageDialog(this, "用户名必须是 3-20 位字母、数字或下划线");
+            usernameField.requestFocusInWindow();
+            return false;
+        }
+        if (password.length() < MIN_PASSWORD_LENGTH || password.length() > MAX_PASSWORD_LENGTH) {
+            JOptionPane.showMessageDialog(this, "密码长度必须是 6-20 位");
+            passwordField.requestFocusInWindow();
+            return false;
+        }
+        if (password.contains(" ")) {
+            JOptionPane.showMessageDialog(this, "密码不能包含空格");
+            passwordField.requestFocusInWindow();
+            return false;
+        }
+
+        return true;
     }
 
     private void handleServerMessage(Message message) {
