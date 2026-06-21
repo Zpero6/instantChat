@@ -151,7 +151,9 @@ public class MessageDispatcher {
         clientHandler.send(result);
     }
 
+    // 关键字搜索处理逻辑
     private void handleSearchRequest(Message message, ClientHandler clientHandler) {
+
         List<ChatMessage> records;
         if ("ALL".equals(message.getTo())) {
             records = chatMessageService.searchGroupHistory(message.getKeyword());
@@ -169,6 +171,7 @@ public class MessageDispatcher {
         clientHandler.send(result);
     }
 
+    // 已读未读逻辑
     private void handleReadReceipt(Message message) {
         ClientHandler targetHandler = OnlineUserManager.getHandler(message.getTo());
         if (targetHandler != null) {

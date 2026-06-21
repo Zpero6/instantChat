@@ -58,6 +58,7 @@ public class ChatMessageService {
         );
     }
 
+    // 聊天记录关键词搜索
     public List<ChatMessage> searchPrivateHistory(String user1, String user2, String keyword) {
         String searchText = keyword == null ? "" : keyword.trim();
         if (searchText.isEmpty()) {

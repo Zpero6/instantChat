@@ -17,9 +17,11 @@ public class MessageType {
     public static final String HISTORY_REQUEST = "HISTORY_REQUEST";
     public static final String HISTORY_RESULT = "HISTORY_RESULT";
 
+    // 关键字搜索请求 , 搜索结果  两种消息类型
     public static final String SEARCH_REQUEST = "SEARCH_REQUEST";
     public static final String SEARCH_RESULT = "SEARCH_RESULT";
 
+// 读取已读未读状态
     public static final String READ_RECEIPT = "READ_RECEIPT";
 
     public static final String FILE = "FILE";

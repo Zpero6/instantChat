@@ -43,6 +43,7 @@ public class Message {
 
     private String keyword;
 
+    // DLC 内容, 消息已读未读字段
     private Boolean read;
 
     private List<String> onlineUsers;
